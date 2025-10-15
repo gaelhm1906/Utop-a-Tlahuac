@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tablero de Control de Obra – UTOPÍA Oyamel (v7 · Carga XLS robusta)</title>
+
+<!-- Chart.js -->
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- SheetJS for reading .xls/.xlsx -->
+<script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+  :root{ --guinda:#691C32; --verde:#006341; --gris-claro:#E4E0DD; --gris-oscuro:#333333; --blanco:#FFFFFF; --dorado:#C5A572; }
+  html, body{ margin:0; padding:0; background:var(--gris-claro); color:var(--gris-oscuro);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; -webkit-text-size-adjust:100%; }
+  header{ background:var(--blanco); color:var(--gris-oscuro); padding:8px 12px; border-bottom:4px solid var(--guinda);
+    position:sticky; top:env(safe-area-inset-top); z-index:10; }
+  .brand{ display:flex; align-items:center; gap:16px; }
+  .brand img{ height:56px; width:auto; image-rendering:-webkit-optimize-contrast; }
+  .titles h1{ margin:0; font-size:20px; line-height:1.2; color:var(--guinda); }
+  .titles p{ margin:0; font-size:12px; opacity:.85; }
+  .container{ padding:10px 12px; max-width:1100px; margin:0 auto; }
+  .mode{ background:#fff; border-radius:999px; padding:8px 10px; display:flex; align-items:center; gap:8px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .switch{ position:relative; display:inline-block; width:52px; height:26px; }
+  .switch input{ display:none; }
+  .slider{ position:absolute; inset:0; cursor:pointer; background:#ccc; transition:.2s; border-radius:26px; }
+  .slider:before{ content:""; position:absolute; height:20px; width:20px; left:3px; bottom:3px; background:#fff; transition:.2s; border-radius:50%; }
+  input:checked + .slider{ background:var(--verde); } input:checked + .slider:before{ transform:translateX(26px); }
+  .badge{ font-size:12px; background:#f5f2f2; padding:4px 8px; border-radius:6px; }
+  .kpis{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; }
+  @media (max-width: 900px){ .kpis{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  .card{ background:#fff; border-radius:12px; padding:10px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .kpi{ display:flex; flex-direction:column; gap:6px; border-left:6px solid var(--guinda); }
+  .kpi h3{ margin:0; font-size:12px; color:#555; }
+  .kpi .value{ font-size:20px; font-weight:800; color:var(--guinda); }
+  .good .value{ color:var(--verde); } .bad .value{ color:#a0182a; }
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width: 900px){ .grid{ grid-template-columns:1fr; } }
+  .canvas-wrap{ height: clamp(180px, 30vh, 260px); }
+  .canvas-wrap.taller{ height: clamp(200px, 32vh, 300px); }
+  .canvas-wrap.square{ height: clamp(200px, 34vh, 300px); }
+  .canvas-wrap canvas{ width:100% !important; height:100% !important; display:block; }
+  .table-wrap{ overflow:auto; -webkit-overflow-scrolling:touch; }
+  table{ border-collapse:collapse; width:100%; }
+  th, td{ padding:10px 8px; border-bottom:1px solid #ddd; font-size:12px; white-space:nowrap; }
+  th{ position:sticky; top:0; background:#fafafa; z-index:1; }
+
+  /* Overlay de carga (superpuesta; no altera el diseño de v7) */
+  .loader-overlay{ position: fixed; inset: 0; background: rgba(255,255,255,.96); backdrop-filter: blur(2px);
+    display:flex; align-items:center; justify-content:center; z-index:1000; }
+  .loader-card{ background:#fff; border:1px solid #eee; border-radius:14px; padding:16px; width:min(560px, 92vw);
+    box-shadow:0 10px 30px rgba(0,0,0,.08); text-align:center; }
+  .loader-card h2{ margin:0 0 8px 0; color:var(--guinda); font-size:18px; }
+  .drop{ border:2px dashed #d2cdc9; border-radius:12px; padding:16px; margin-top:10px; }
+  .drop p{ margin:6px 0 0 0; font-size:12px; color:#666; }
+  .button{ appearance:none; border:none; background:var(--guinda); color:#fff; padding:10px 14px; border-radius:999px; font-weight:700; cursor:pointer; }
+  .muted{ font-size:11px; color:#777; margin-top:8px; }
+  .hidden{ display:none !important; }
+  .row-flash { animation: rowflash 1.2s ease-out 1; } @keyframes rowflash { 0% { background:#fff3cd; } 100% { background:transparent; } }
+  .inline { display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  select{ padding:8px 10px; border:1px solid #ccc; border-radius:8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path fill="#691C32" d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+    </svg>
+    <div class="titles">
+      <h1>Tablero de Control de Obra · UTOPÍA Oyamel</h1>
+      <p>Periodo: 30 Sep – 7 Oct · Avances físicos y financieros</p>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="mode">
+    <span class="badge">KPIs:</span>
+    <span id="labelUnw">Promedio simple</span>
+    <label class="switch"><input type="checkbox" id="toggleMode"><span class="slider"></span></label>
+    <span id="labelW">Ponderado por monto</span>
+  </div>
+
+  <section class="hi" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:8px 0;">
+    <div class="card box" style="border-left:6px solid var(--verde);">
+      <h4 style="margin:0; font-size:12px; color:#555;">Frente más avanzado</h4>
+      <div class="big" id="hi_avz_nombre" style="font-size:18px; font-weight:800; color:var(--guinda);">—</div>
+      <div>Avance real: <span id="hi_avz_val">—</span></div>
+    </div>
+    <div class="card box bad" style="border-left:6px solid #a0182a;">
+      <h4 style="margin:0; font-size:12px; color:#555;">Frente más atrasado</h4>
+      <div class="big" id="hi_atr_nombre" style="font-size:18px; font-weight:800; color:var(--guinda);">—</div>
+      <div>Δ Real-Plan: <span id="hi_atr_val">—</span></div>
+    </div>
+  </section>
+
+  <section class="kpis">
+    <div class="card kpi"><h3>Avance físico programado (global)</h3><div class="value" id="kpi_prog">0%</div></div>
+    <div class="card kpi" id="kpi_real_card"><h3>Avance físico real (global)</h3><div class="value" id="kpi_real">0%</div></div>
+    <div class="card kpi" id="kpi_diff_card"><h3>Diferencia Real - Programado</h3><div class="value" id="kpi_diff">0.0 pp</div></div>
+    <div class="card kpi"><h3>Monto total (c/ IVA)</h3><div class="value" id="kpi_monto">$0</div></div>
+  </section>
+
+  <section class="grid" style="margin-top:10px;">
+    <div class="card">
+      <h3 style="margin:0 0 6px 0;">Avance físico por frente (Programado vs Real)</h3>
+      <div class="canvas-wrap"><canvas id="chartAvance"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 6px 0;">Avance financiero por frente (Tramitado vs Cobrado)</h3>
+      <div class="canvas-wrap"><canvas id="chartFin"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 6px 0;">Diferencia por frente (pp)</h3>
+      <div class="canvas-wrap taller"><canvas id="chartAtraso"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 6px 0;">Distribución del monto por frente</h3>
+      <div class="canvas-wrap square"><canvas id="chartMontos"></canvas></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:10px;">
+    <h3 style="margin:0 0 6px 0;">Datos tabulares</h3>
+    <div class="table-wrap">
+      <table id="tablaDatos"><thead><tr id="theadRow"></tr></thead><tbody id="tbodyRows"></tbody></table>
+    </div>
+  </section>
+</div>
+
+<div class="loader-overlay" id="loader">
+  <div class="loader-card">
+    <h2>Cargar archivo .xls / .xlsx</h2>
+    <div class="drop" id="drop">
+      <input type="file" id="file" accept=".xls,.xlsx" class="hidden">
+      <button class="button" id="pick">Seleccionar archivo</button>
+      <p>O arrastra y suelta el archivo aquí</p>
+      <div class="inline hidden" id="sheetRow">
+        <label>Hoja:&nbsp;</label>
+        <select id="sheetSel"></select>
+        <button class="button" id="useSheet">Usar hoja</button>
+      </div>
+      <p class="muted">Consejo: si tu archivo tiene varias filas de encabezado, el sistema buscará la fila correcta automáticamente (FRENTE y EMPRESA).</p>
+      <p class="muted">Si los avances están en números (0–1) o en porcentajes (20, 40, 85%), ambos formatos son aceptados.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========= utilidades numéricas ========= */
+function toNumberLoose(v){
+  if(v==null || v==='') return NaN;
+  if(typeof v === 'number') return v;
+  const s = String(v).replace(/\s/g,'').replace(/[,$]/g,'').replace('—','').replace('–','');
+  const n = Number(s.replace('%',''));
+  return isFinite(n) ? n : NaN;
+}
+function parsePercent(v){
+  // acepta 0..1 (fracción) ó 0..100 (porcentaje) / "35%"
+  if(v==null || v==='') return NaN;
+  if(typeof v === 'number'){
+    if(v > 1.5) return v/100; // 35 -> .35
+    if(v < 0) return 0;
+    return v; // ya es fracción
+  }
+  const s = String(v).trim().replace(',','.');
+  if(s.endsWith('%')){
+    const n = Number(s.slice(0,-1)); return isFinite(n) ? n/100 : NaN;
+  }
+  const n = Number(s);
+  if(!isFinite(n)) return NaN;
+  return n > 1.5 ? n/100 : n;
+}
+function sum(a){ return a.reduce((s,v)=> s + (isFinite(v)? v : 0), 0); }
+function mean(a){ const b=a.filter(x=> isFinite(x)); return b.length? sum(b)/b.length : 0; }
+function money(x){ return '$' + Math.round(x).toLocaleString('es-MX'); }
+function pct(x){ return (x*100).toFixed(1)+'%'; }
+
+/* ========= encabezados flexibles ========= */
+function normHeader(h){
+  return String(h||'').trim().toUpperCase()
+    .replace(/\s+/g,' ')
+    .replace(/[ÁÀÄ]/g,'A').replace(/[ÉÈË]/g,'E').replace(/[ÍÌÏ]/g,'I').replace(/[ÓÒÖ]/g,'O').replace(/[ÚÙÜ]/g,'U')
+    .replace(/[.,;/\-–—]/g,' ');
+}
+function pickColumns(cols){
+  const map = {};
+  cols.forEach(c=>{
+    const n = normHeader(c);
+    if(n.includes('FRENTE')) map.FRENTE=c;
+    else if(n.includes('EMPRESA')) map.EMPRESA=c;
+    else if(n.includes('CONTRATO')) map.CONTRATO=c;
+    else if(n.includes('MONTO')) map.MONTO=c;
+    else if(n.includes('PROGRAMADO') && n.includes('AVANCE')) map.AVANCE_PROGRAMADO=c;
+    else if(n.includes('REAL') && n.includes('AVANCE')) map.AVANCE_REAL=c;
+    else if(n.includes('SEMANAL')) map.AVANCE_SEMANAL=c;
+    else if(n.includes('ATRASO')) map.ATRASO=c;
+    else if(n.includes('TRAMITADO')) map.FINANCIERO_TRAMITADO=c;
+    else if(n.includes('COBRADO')) map.FINANCIERO_COBRADO=c;
+    else if(n.includes('ESTIMACIONES') && n.includes('PENDIENTES')) map.ESTIMACIONES_PENDIENTES=c;
+  });
+  return map;
+}
+
+/* ========= tabla ========= */
+function renderTable(df, order){
+  const thead = document.getElementById('theadRow');
+  const tbody = document.getElementById('tbodyRows');
+  thead.innerHTML = ''; tbody.innerHTML = '';
+  order.forEach(c=>{ const th=document.createElement('th'); th.textContent=c; thead.appendChild(th); });
+  df.forEach((row,i)=>{
+    const tr = document.createElement('tr'); tr.id = 'row-'+(i+1);
+    order.forEach(c=>{
+      const td=document.createElement('td'); let v=row[c];
+      if(typeof v==='number' && /MONTO|FINANCIERO/i.test(c)) td.textContent = money(v);
+      else if(typeof v==='number' && /(AVANCE|ATRASO)/i.test(c)) td.textContent = (v*100).toFixed(1)+'%';
+      else td.textContent = (v==null?'':v);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+/* ========= gráficas ========= */
+let cAvance, cFin, cAtraso, cMontos;
+function buildCharts(labels, prog, real, finTram, finCobr, montos, deltaPP){
+  const yPctScale = { beginAtZero:true, max:1, grid:{color:'rgba(0,0,0,.06)'}, ticks:{ callback:v=>(v*100)+'%' }, title:{display:true, text:'Porcentaje (%)'} };
+  const n = labels.length || 1;
+  const dynBarThickness = Math.max(6, Math.min(20, Math.floor(240/n)));
+  const dynCategoryPercentage = 0.7, dynBarPercentage = 0.9;
+
+  cAvance && cAvance.destroy();
+  cFin && cFin.destroy();
+  cAtraso && cAtraso.destroy();
+  cMontos && cMontos.destroy();
+
+  cAvance = new Chart(document.getElementById('chartAvance'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'Programado', data:prog, backgroundColor:'rgba(105,28,50,0.85)', categoryPercentage: dynCategoryPercentage, barPercentage: dynBarPercentage},
+      {label:'Real', data:real, backgroundColor:'rgba(0,99,65,0.85)', categoryPercentage: dynCategoryPercentage, barPercentage: dynBarPercentage}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{y:yPctScale, x:{grid:{display:false}}} }
+  });
+
+  cFin = new Chart(document.getElementById('chartFin'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'Tramitado', data:finTram, backgroundColor:'rgba(197,165,114,0.9)', categoryPercentage: dynCategoryPercentage, barPercentage: dynBarPercentage},
+      {label:'Cobrado', data:finCobr, backgroundColor:'rgba(105,28,50,0.85)', categoryPercentage: dynCategoryPercentage, barPercentage: dynBarPercentage}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{y:yPctScale, x:{grid:{display:false}}} }
+  });
+
+  const maxAbs = Math.max(...deltaPP.map(v => Math.abs(isFinite(v)? v : 0)));
+  const lim = Math.max(5, Math.ceil(maxAbs * 1.15));
+  cAtraso = new Chart(document.getElementById('chartAtraso'), {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'Δ Real - Programado (pp)', data:deltaPP, backgroundColor: deltaPP.map(v => v>=0?'rgba(0,99,65,0.85)':'rgba(105,28,50,0.85)'), barThickness: dynBarThickness, maxBarThickness:22, categoryPercentage:0.8, barPercentage:0.9 }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{ label:(c)=> 'Δ: '+c.parsed.x.toFixed(1)+' pp'}}}, scales:{ x:{ suggestedMin:-lim, suggestedMax:lim, title:{display:true, text:'Puntos porcentuales (pp)'}}, y:{ grid:{display:false}, ticks:{autoSkip:true, maxTicksLimit:10}} } }
+  });
+
+  cMontos = new Chart(document.getElementById('chartMontos'), {
+    type:'doughnut',
+    data:{ labels, datasets:[{ data:montos, backgroundColor:['#691C32','#006341','#C5A572','#3F51B5','#FF5722','#9C27B0','#009688','#795548','#E91E63','#2196F3','#8BC34A','#FFC107','#607D8B'], borderWidth:1, borderColor:'#fff' }]},
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{position:'right'} } }
+  });
+}
+
+/* ========= KPIs ========= */
+function paintKPIs(labels, prog, real, montos){
+  const W = montos.map(m => isFinite(m)? m : 0);
+  const Wsum = sum(W) || 1;
+  const wavg = arr => arr.reduce((acc,v,i)=> acc + (isFinite(v)? v:0) * W[i], 0) / Wsum;
+
+  const KPIs_weighted   = { prog: wavg(prog), real: wavg(real), diff_pp:(wavg(real)-wavg(prog))*100 };
+  const KPIs_unweighted = { prog: mean(prog), real: mean(real), diff_pp:(mean(real)-mean(prog))*100 };
+  const montoTotal = sum(montos);
+
+  function apply(k){
+    document.getElementById('kpi_prog').textContent = pct(k.prog);
+    document.getElementById('kpi_real').textContent = pct(k.real);
+    document.getElementById('kpi_diff').textContent = k.diff_pp.toFixed(1) + ' pp';
+    document.getElementById('kpi_monto').textContent = money(montoTotal);
+    const realCard = document.getElementById('kpi_real_card');
+    const diffCard = document.getElementById('kpi_diff_card');
+    realCard.classList.remove('good','bad'); diffCard.classList.remove('good','bad');
+    if(k.real >= k.prog){ realCard.classList.add('good'); diffCard.classList.add('good'); } else { realCard.classList.add('bad'); diffCard.classList.add('bad'); }
+  }
+
+  const toggle = document.getElementById('toggleMode');
+  toggle.checked = true;
+  apply(KPIs_weighted);
+  toggle.addEventListener('change', e => apply(e.target.checked ? KPIs_weighted : KPIs_unweighted));
+
+  let avzIdx = 0; for(let i=1;i<real.length;i++){ if(real[i] > real[avzIdx]) avzIdx = i; }
+  let atrIdx = 0; const deltaPP = real.map((r,i)=> (r - (prog[i]||0)) * 100);
+  for(let i=1;i<deltaPP.length;i++){ if(deltaPP[i] < deltaPP[atrIdx]) atrIdx = i; }
+  document.getElementById('hi_avz_nombre').textContent = labels[avzIdx] || '—';
+  document.getElementById('hi_avz_val').textContent    = pct(real[avzIdx] || 0);
+  document.getElementById('hi_atr_nombre').textContent = labels[atrIdx] || '—';
+  document.getElementById('hi_atr_val').textContent    = (deltaPP[atrIdx]||0).toFixed(1) + ' pp';
+}
+
+/* ========= búsqueda de fila de encabezados ========= */
+function findHeaderRow(ws){
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let r = range.s.r; r <= range.e.r; r++){
+    let rowVals = [];
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = ws[XLSX.utils.encode_cell({r,c})];
+      rowVals.push(cell ? cell.v : '');
+    }
+    const norm = rowVals.map(normHeader);
+    const hasFrente  = norm.some(v => v.includes('FRENTE'));
+    const hasEmpresa = norm.some(v => v.includes('EMPRESA'));
+    if(hasFrente && hasEmpresa) return r;
+  }
+  return null;
+}
+function normHeader(h){
+  return String(h||'').trim().toUpperCase()
+    .replace(/\s+/g,' ')
+    .replace(/[ÁÀÄ]/g,'A').replace(/[ÉÈË]/g,'E').replace(/[ÍÌÏ]/g,'I').replace(/[ÓÒÖ]/g,'O').replace(/[ÚÙÜ]/g,'U');
+}
+
+/* ========= lectura robusta ========= */
+function readSheet(ws){
+  // Detecta fila de encabezados
+  const headerRow = findHeaderRow(ws);
+  let data;
+  if(headerRow!=null){
+    data = XLSX.utils.sheet_to_json(ws, {range: headerRow, defval: null, raw: false});
+  }else{
+    data = XLSX.utils.sheet_to_json(ws, {defval: null, raw: false});
+  }
+  return data;
+}
+
+/* ========= manejo del workbook ========= */
+function handleWorksheet(ws){
+  const json = readSheet(ws);
+  if(!json.length){ alert('No se encontraron datos en la hoja seleccionada.'); return; }
+
+  const cols = Object.keys(json[0]);
+  const map  = pickColumns(cols);
+  if(!map.FRENTE || !map.AVANCE_REAL){
+    console.warn('Encabezados detectados:', cols);
+    alert('No pude identificar columnas clave (FRENTE y/o AVANCE REAL). Revisa encabezados.');
+    return;
+  }
+
+  const rows = json.map(r => ({
+    [map.FRENTE] : r[map.FRENTE],
+    [map.EMPRESA]: r[map.EMPRESA],
+    [map.CONTRATO]: r[map.CONTRATO],
+    [map.MONTO]: toNumberLoose(r[map.MONTO]),
+    [map.AVANCE_PROGRAMADO]: parsePercent(r[map.AVANCE_PROGRAMADO]),
+    [map.AVANCE_REAL]: parsePercent(r[map.AVANCE_REAL]),
+    [map.AVANCE_SEMANAL]: parsePercent(r[map.AVANCE_SEMANAL]),
+    [map.ATRASO]: parsePercent(r[map.ATRASO]),
+    [map.FINANCIERO_TRAMITADO]: toNumberLoose(r[map.FINANCIERO_TRAMITADO]),
+    [map.FINANCIERO_COBRADO]: toNumberLoose(r[map.FINANCIERO_COBRADO]),
+    [map.ESTIMACIONES_PENDIENTES]: r[map.ESTIMACIONES_PENDIENTES]
+  }));
+
+  const clean = rows.filter(r => r[map.FRENTE]!=null && String(r[map.FRENTE]).trim()!=='');
+
+  const order = [map.FRENTE,map.EMPRESA,map.CONTRATO,map.MONTO,map.AVANCE_PROGRAMADO,map.AVANCE_REAL,map.AVANCE_SEMANAL,map.ATRASO,map.FINANCIERO_TRAMITADO,map.FINANCIERO_COBRADO,map.ESTIMACIONES_PENDIENTES].filter(Boolean);
+
+  const labels = clean.map(r => String(r[map.FRENTE]||''));
+  const prog   = clean.map(r => +r[map.AVANCE_PROGRAMADO] || 0);
+  const real   = clean.map(r => +r[map.AVANCE_REAL] || 0);
+  const tram   = clean.map(r => +r[map.FINANCIERO_TRAMITADO] || 0);
+  const cobr   = clean.map(r => +r[map.FINANCIERO_COBRADO] || 0);
+  const montos = clean.map(r => +r[map.MONTO] || 0);
+  const deltaPP= clean.map((r,i)=> (real[i] - (prog[i]||0)) * 100);
+
+  renderTable(clean, order);
+  buildCharts(labels, prog, real, tram, cobr, montos, deltaPP);
+  paintKPIs(labels, prog, real, montos);
+
+  document.getElementById('loader').classList.add('hidden');
+}
+
+/* ========= UI de carga ========= */
+window.addEventListener('DOMContentLoaded', function(){
+  const drop = document.getElementById('drop');
+  const file = document.getElementById('file');
+  const pick = document.getElementById('pick');
+  const sheetRow = document.getElementById('sheetRow');
+  const sheetSel = document.getElementById('sheetSel');
+  const useSheet = document.getElementById('useSheet');
+
+  let workbook = null;
+
+  function showSheets(wb){
+    if(wb.SheetNames.length <= 1){ handleWorksheet(wb.Sheets[wb.SheetNames[0]]); return; }
+    sheetSel.innerHTML = '';
+    wb.SheetNames.forEach(n => {
+      const opt = document.createElement('option'); opt.value = n; opt.textContent = n; sheetSel.appendChild(opt);
+    });
+    sheetRow.classList.remove('hidden');
+    useSheet.onclick = () => {
+      const name = sheetSel.value;
+      handleWorksheet(wb.Sheets[name]);
+    };
+  }
+
+  function loadFile(f){
+    const reader = new FileReader();
+    reader.onload = (evt)=>{
+      const data = evt.target.result;
+      try{
+        workbook = XLSX.read(data, {type:'array'});
+        showSheets(workbook);
+      }catch(e){
+        alert('No se pudo leer el archivo. Prueba guardarlo como .xlsx e inténtalo de nuevo.');
+        console.error(e);
+      }
+    };
+    reader.readAsArrayBuffer(f);
+  }
+
+  pick.addEventListener('click', ()=> file.click());
+  file.addEventListener('change', (e)=>{ if(e.target.files[0]) loadFile(e.target.files[0]); });
+
+  ;['dragenter','dragover'].forEach(ev=> drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); drop.style.borderColor = '#006341'; }));
+  ;['dragleave','drop'].forEach(ev=> drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); drop.style.borderColor = '#d2cdc9'; }));
+  drop.addEventListener('drop', (e)=>{ if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+});
+</script>
+</body>
+</html>
